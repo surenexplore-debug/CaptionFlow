@@ -18,6 +18,11 @@
   border-radius: 0 !important;
 }
 
+/* Keep the stage (black box) hidden until a video is chosen.
+   Without this, display:block above overrides the video's hidden attribute. */
+.video-stage video[hidden] { display: none; }
+.video-stage:has(video[hidden]) { display: none; }
+
 .cap-overlay {
   position: absolute;
   left: 0;
