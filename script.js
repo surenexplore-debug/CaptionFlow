@@ -1,6 +1,39 @@
 
 const $ = (id) => document.getElementById(id);
 
+const videoFileInput = $("videoFile");
+const videoPreview = $("videoPreview");
+const videoFileName = $("videoFileName");
+
+let currentVideoUrl = null;
+
+if (videoFileInput && videoPreview && videoFileName) {
+  videoFileInput.addEventListener("change", () => {
+    const file = videoFileInput.files[0];
+
+    if (!file) return;
+
+    if (!file.type.startsWith("video/")) {
+      notify("Please select a video file.");
+      videoFileInput.value = "";
+      return;
+    }
+
+    if (currentVideoUrl) {
+      URL.revokeObjectURL(currentVideoUrl);
+    }
+
+    currentVideoUrl = URL.createObjectURL(file);
+
+    videoPreview.src = currentVideoUrl;
+    videoPreview.hidden = false;
+    videoFileName.textContent = file.name;
+
+    notify("Video loaded! You can preview it now.");
+  });
+}
+
+
 let mode = "caption";
 let platform = "YouTube";
 let tone = "Professional";
