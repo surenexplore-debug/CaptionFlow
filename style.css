@@ -589,3 +589,9 @@ textarea::placeholder {
 }
 .caption-line time { color: var(--light); flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .caption-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+/* "Choose video" is a <label>, so it needs this to get proper button padding */
+label.btn { display: inline-block; cursor: pointer; }
+
+/* Make the language dropdown match the rest of the app */
+select { font: inherit; }
+select.chip { cursor: pointer; margin-bottom: 4px; }
