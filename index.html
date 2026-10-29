@@ -80,80 +80,40 @@
 
     <section class="workspace" id="generatorSection">
 
-      <!-- Video Upload -->
-      <section class="panel video-upload-panel" style="margin-bottom:20px;">
-        <h2>Upload your video</h2>
-        <p class="muted">Choose a video from your device to preview it.</p>
+      
 
-        <label for="videoFile" class="btn primary">
-          Choose video
-        </label>
+       <!-- Video Upload -->
+<section class="panel video-upload-panel">
+  <h2>Upload your video</h2>
+  <p class="muted">Choose a video from your device to preview it and auto-caption it.</p>
 
-        <input
-          type="file"
-          id="videoFile"
-          accept="video/*"
-          hidden
-        />
+  <label for="videoFile" class="btn primary">Choose video</label>
+  <input type="file" id="videoFile" accept="video/*" hidden />
 
-        <p id="videoFileName" class="muted">No video selected</p>
+  <p id="videoFileName" class="muted">No video selected</p>
 
-        <video
-          id="videoPreview"
-          controls
-          hidden
-          style="width:100%;max-height:360px;border-radius:12px;"
-        >
-          
-<div class="caption-controls" style="margin-top:16px;">
-  <label for="captionLanguage" class="field-label">
-    Spoken language
-  </label>
+  <video id="videoPreview" controls hidden
+         style="width:100%;max-height:360px;border-radius:12px;"></video>
 
-  <select id="captionLanguage" class="chip">
-    <option value="en">English</option>
-    <option value="ne">Nepali</option>
-    <option value="hi">Hindi</option>
-  </select>
+  <div class="caption-controls" style="margin-top:16px;">
+    <label for="captionLanguage" class="field-label">Spoken language</label>
+    <select id="captionLanguage" class="chip">
+      <option value="english">English</option>
+      <option value="nepali">Nepali</option>
+      <option value="hindi">Hindi</option>
+    </select>
 
-  <button
-    type="button"
-    class="btn primary"
-    id="autoCaptionBtn"
-    style="width:100%;margin-top:12px;"
-  >
-    ✨ Generate Auto Captions
-  </button>
+    <button type="button" class="btn primary" id="autoCaptionBtn"
+            style="width:100%;margin-top:12px;">
+      ✨ Generate Auto Captions
+    </button>
 
-  <p id="captionStatus" class="muted" aria-live="polite">
-    Upload a video to get started.
-  </p>
-
-  <div id="captionOutput"></div>
-</div>
-
-        </video>
-        
-<div class="caption-controls" style="margin-top:16px;">
-  <label for="captionLanguage">Spoken language</label>
-  <select id="captionLanguage">
-    <option value="en">English</option>
-    <option value="ne">Nepali</option>
-    <option value="hi">Hindi</option>
-  </select>
-
-  <button type="button" class="btn primary"
-          id="autoCaptionBtn"
-          style="width:100%;margin-top:12px;">
-    ✨ Generate Auto Captions
-  </button>
-
-  <p id="captionStatus" class="muted" aria-live="polite">
-    Upload a video to get started.
-  </p>
-  <div id="captionOutput"></div>
-</div>
-
+    <p id="captionStatus" class="muted" aria-live="polite">
+      Upload a video to get started.
+    </p>
+    <div id="captionOutput"></div>
+  </div>
+</section>
       </section>
 
       <!-- Generator -->
