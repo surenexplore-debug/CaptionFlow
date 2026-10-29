@@ -733,6 +733,14 @@ $("greeting").textContent =
         <button type="button" class="btn secondary" id="capReset">Reset</button>
       </div>
     </div>
+    <div class="export-row" style="margin-top:14px;">
+      <button type="button" class="btn primary" id="capExport" style="width:100%;">
+        ⬇ Download video with captions
+      </button>
+      <p class="muted style-hint" id="capExportStatus">
+        Saves your video with the styled captions burned in. It records in real time, so keep this tab open and visible until it finishes.
+      </p>
+    </div>
     <p class="muted style-hint">
       Pick a template to preview it on your video. After generating captions, click any
       caption line to edit it, and click a time to jump there.
@@ -878,6 +886,406 @@ $("greeting").textContent =
   ["pause", "seeked", "timeupdate", "loadeddata", "ended"].forEach((evt) =>
     video.addEventListener(evt, update)
   );
+
+  /* ---------- Download video with captions burned in ---------- */
+  const exportBtn = panel.querySelector("#capExport");
+  const exportStatus = panel.querySelector("#capExportStatus");
+  const EXPORT_HINT = exportStatus.textContent;
+  let exporting = false;
+  let cancelExport = false;
+
+  const FONT_FAMILY = 'Inter, "Segoe UI", system-ui, sans-serif';
+  const TPL_FONT = {
+    classic: { w: 700 },
+    neon: { w: 800 },
+    sunset: { w: 900 },
+    pop: { w: 900 },
+    purple: { w: 800 },
+    comic: { w: 800, f: '"Comic Sans MS", "Chalkboard SE", "Comic Neue", cursive, sans-serif' },
+    ocean: { w: 800 },
+    cyber: { w: 800, f: '"Courier New", ui-monospace, monospace' },
+    gold: { w: 800, f: 'Georgia, "Times New Roman", serif' },
+    rainbow: { w: 900 }
+  };
+  const TPL_PAD = {
+    classic: [0.5, 0.15],
+    purple: [0.6, 0.2],
+    comic: [0.5, 0.15],
+    ocean: [0.7, 0.2],
+    cyber: [0.55, 0.15]
+  };
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // Wrap text into balanced lines that fit maxW
+  function wrapLines(ctx, text, maxW) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const greedy = (w) => {
+      const lines = [];
+      let cur = "";
+      for (const word of words) {
+        const trial = cur ? cur + " " + word : word;
+        if (!cur || ctx.measureText(trial).width <= w) cur = trial;
+        else {
+          lines.push(cur);
+          cur = word;
+        }
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    };
+    let lines = greedy(maxW);
+    if (lines.length > 1) {
+      let lo = (maxW / lines.length) * 0.6;
+      let hi = maxW;
+      for (let i = 0; i < 12; i++) {
+        const mid = (lo + hi) / 2;
+        if (greedy(mid).length <= lines.length) hi = mid;
+        else lo = mid;
+      }
+      lines = greedy(hi);
+    }
+    return lines;
+  }
+
+  // Draw one styled caption onto the canvas (mirrors the 10 CSS templates)
+  function drawCaption(ctx, W, H, raw, id, t) {
+    let text = (raw || "").trim();
+    if (!text) return;
+    if (state.upper || id === "pop") text = text.toUpperCase();
+
+    const em = Math.max(10, (W * state.size) / 100);
+    const cfg = TPL_FONT[id] || { w: 800 };
+    const [padX, padY] = TPL_PAD[id] || [0, 0];
+
+    ctx.save();
+    ctx.font = `${cfg.w} ${em}px ${cfg.f || FONT_FAMILY}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+
+    const lines = wrapLines(ctx, text, W * 0.9 - padX * 2 * em);
+    const lineH = em * 1.25;
+    const textW = Math.max(...lines.map((l) => ctx.measureText(l).width));
+    const bw = textW + padX * 2 * em;
+    const bh = lines.length * lineH + padY * 2 * em;
+    const cx = W / 2;
+    const bottom = H - (H * state.pos) / 100;
+    const top = bottom - bh;
+    const left = cx - bw / 2;
+
+    const ly = (i) => top + padY * em + lineH * (i + 0.5);
+    const eachLine = (fn) => lines.forEach((l, i) => fn(l, cx, ly(i)));
+    const noShadow = () => {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    };
+    const setShadow = (color, blur, ox, oy) => {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = blur * em;
+      ctx.shadowOffsetX = ox * em;
+      ctx.shadowOffsetY = oy * em;
+    };
+    const fillText = (style) => {
+      ctx.fillStyle = style;
+      eachLine((l, x, y) => ctx.fillText(l, x, y));
+    };
+    const strokeText = (style, width) => {
+      ctx.strokeStyle = style;
+      ctx.lineWidth = width * em;
+      eachLine((l, x, y) => ctx.strokeText(l, x, y));
+    };
+    const hGrad = (stops) => {
+      const g = ctx.createLinearGradient(left, 0, left + bw, 0);
+      stops.forEach(([p, c]) => g.addColorStop(p, c));
+      return g;
+    };
+
+    if (id === "comic") {
+      ctx.translate(cx, top + bh / 2);
+      ctx.rotate((-1.5 * Math.PI) / 180);
+      ctx.translate(-cx, -(top + bh / 2));
+    }
+
+    switch (id) {
+      case "classic":
+        ctx.fillStyle = "rgba(0,0,0,.75)";
+        roundRectPath(ctx, left, top, bw, bh, 0.25 * em);
+        ctx.fill();
+        fillText("#fff");
+        break;
+
+      case "neon":
+        [[0.6, "#22d3ee"], [1, "#ec4899"], [0.3, "#22d3ee"], [0.08, "#fff"]].forEach(([b, c]) => {
+          setShadow(c, b, 0, 0);
+          fillText("#fff");
+        });
+        break;
+
+      case "sunset":
+        setShadow("rgba(0,0,0,.75)", 0.08, 0, 0.05);
+        strokeText("rgba(0,0,0,.9)", 0.05);
+        noShadow();
+        fillText(hGrad([[0, "#ff9a3c"], [0.5, "#ff4f81"], [1, "#c13bff"]]));
+        break;
+
+      case "pop":
+        setShadow("#000", 0, 0, 0.07);
+        strokeText("#000", 0.15);
+        noShadow();
+        strokeText("#000", 0.15);
+        fillText("#ffe600");
+        break;
+
+      case "purple": {
+        const g = ctx.createLinearGradient(left, top, left + bw, top + bh);
+        g.addColorStop(0, "#7c3aed");
+        g.addColorStop(1, "#c026d3");
+        setShadow("rgba(124,58,237,.6)", 0.4, 0, 0.1);
+        ctx.fillStyle = g;
+        roundRectPath(ctx, left, top, bw, bh, 0.5 * em);
+        ctx.fill();
+        noShadow();
+        fillText("#fff");
+        break;
+      }
+
+      case "comic":
+        ctx.fillStyle = "#000";
+        ctx.fillRect(left + 0.12 * em, top + 0.12 * em, bw, bh);
+        ctx.fillStyle = "#ff2e88";
+        ctx.fillRect(left, top, bw, bh);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 0.07 * em;
+        ctx.strokeRect(left, top, bw, bh);
+        fillText("#fff700");
+        break;
+
+      case "ocean":
+        ctx.fillStyle = hGrad([[0, "#06b6d4"], [0.5, "#3b82f6"], [1, "#10b981"]]);
+        roundRectPath(ctx, left, top, bw, bh, 0.8 * em);
+        ctx.fill();
+        setShadow("rgba(0,0,0,.35)", 0.1, 0, 0.05);
+        fillText("#fff");
+        break;
+
+      case "cyber":
+        setShadow("rgba(182,255,59,.55)", 0.5, 0, 0);
+        ctx.fillStyle = "rgba(8,12,8,.85)";
+        roundRectPath(ctx, left, top, bw, bh, 0.2 * em);
+        ctx.fill();
+        noShadow();
+        ctx.strokeStyle = "#b6ff3b";
+        ctx.lineWidth = 0.06 * em;
+        ctx.stroke();
+        fillText("#b6ff3b");
+        break;
+
+      case "gold": {
+        const g = ctx.createLinearGradient(0, top, 0, top + bh);
+        g.addColorStop(0, "#fff3b0");
+        g.addColorStop(0.45, "#f5c542");
+        g.addColorStop(1, "#b8860b");
+        setShadow("rgba(0,0,0,.85)", 0.06, 0, 0.05);
+        strokeText("rgba(0,0,0,.9)", 0.05);
+        noShadow();
+        fillText(g);
+        break;
+      }
+
+      case "rainbow": {
+        const cols = ["#ff3b3b", "#ffb300", "#38d430", "#00c3ff", "#8a4dff", "#ff3bd4", "#ff3b3b"];
+        const span = bw * 2;
+        const shift = ((t % 3) / 3) * span;
+        const x0 = left - span + shift;
+        const g = ctx.createLinearGradient(x0, 0, x0 + span * 2, 0);
+        for (let c = 0; c < 2; c++) {
+          cols.forEach((col, i) => g.addColorStop(Math.min(1, (c + i / 6) / 2), col));
+        }
+        setShadow("rgba(0,0,0,.8)", 0.08, 0, 0.05);
+        strokeText("rgba(0,0,0,.9)", 0.05);
+        noShadow();
+        fillText(g);
+        break;
+      }
+
+      default:
+        fillText("#fff");
+    }
+
+    ctx.restore();
+  }
+
+  function textAtTime(t) {
+    for (let i = 0; i < state.chunks.length; i++) {
+      const c = state.chunks[i];
+      const start = c.timestamp?.[0] ?? 0;
+      const end = c.timestamp?.[1] ?? start + 3;
+      if (t >= start && t < end) return c.text.trim();
+    }
+    return "";
+  }
+
+  function pickMime() {
+    const options = [
+      "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+      "video/mp4",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm"
+    ];
+    return options.find((m) => MediaRecorder.isTypeSupported(m)) || "";
+  }
+
+  async function exportVideo() {
+    const file = fileInput && fileInput.files[0];
+    if (!file) {
+      notify("Choose a video first.");
+      return;
+    }
+    if (!state.chunks.length) {
+      notify("Generate auto captions first.");
+      return;
+    }
+    if (typeof MediaRecorder === "undefined" || !HTMLCanvasElement.prototype.captureStream) {
+      exportStatus.textContent =
+        "This browser can't record video. Please use Chrome, Edge or Firefox on a computer.";
+      return;
+    }
+
+    exporting = true;
+    cancelExport = false;
+    exportBtn.textContent = "■ Stop";
+
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    let actx = null;
+    let stream = null;
+
+    try {
+      actx = AudioCtx ? new AudioCtx() : null;
+      if (actx && actx.state === "suspended") await actx.resume();
+
+      v.playsInline = true;
+      v.preload = "auto";
+      v.src = url;
+      await new Promise((resolve, reject) => {
+        v.onloadedmetadata = resolve;
+        v.onerror = () => reject(new Error("Could not load the video."));
+      });
+
+      // Keep the output a sensible size (max 1280 px on the long side)
+      const scale = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+      const W = Math.max(2, Math.round((v.videoWidth * scale) / 2) * 2);
+      const H = Math.max(2, Math.round((v.videoHeight * scale) / 2) * 2);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+
+      const tracks = [...canvas.captureStream(30).getVideoTracks()];
+      if (actx) {
+        // Route the audio into the recording only (nothing plays out loud)
+        const srcNode = actx.createMediaElementSource(v);
+        const dest = actx.createMediaStreamDestination();
+        srcNode.connect(dest);
+        tracks.push(...dest.stream.getAudioTracks());
+      }
+      stream = new MediaStream(tracks);
+
+      const mime = pickMime();
+      const rec = new MediaRecorder(
+        stream,
+        mime ? { mimeType: mime, videoBitsPerSecond: 4000000 } : undefined
+      );
+      const parts = [];
+      rec.ondataavailable = (e) => {
+        if (e.data && e.data.size) parts.push(e.data);
+      };
+      const stopped = new Promise((resolve) => (rec.onstop = resolve));
+
+      const paint = () => {
+        ctx.drawImage(v, 0, 0, W, H);
+        drawCaption(ctx, W, H, textAtTime(v.currentTime), state.template, v.currentTime);
+      };
+
+      paint();
+      rec.start(500);
+      await v.play();
+
+      const dur = v.duration || 0;
+      await new Promise((resolve) => {
+        const tick = () => {
+          paint();
+          if (dur) {
+            const pct = Math.min(99, Math.round((v.currentTime / dur) * 100));
+            exportStatus.textContent =
+              `Rendering… ${pct}% — keep this tab open and visible.`;
+          }
+          if (v.ended || cancelExport) {
+            resolve();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
+
+      v.pause();
+      paint();
+      await new Promise((r) => setTimeout(r, 250)); // let the last frames flush
+      if (rec.state !== "inactive") rec.stop();
+      await stopped;
+
+      if (cancelExport) {
+        exportStatus.textContent = "Stopped. Nothing was saved.";
+        return;
+      }
+
+      const baseType = (mime || "video/webm").split(";")[0];
+      const ext = baseType === "video/mp4" ? "mp4" : "webm";
+      downloadFile("captioned-video." + ext, new Blob(parts, { type: baseType }), baseType);
+      exportStatus.textContent = `Done! Saved captioned-video.${ext} with your captions inside.`;
+      if (typeof notify === "function") notify("Video with captions saved!");
+    } catch (err) {
+      console.error(err);
+      exportStatus.textContent =
+        "Couldn't create the video: " + (err && err.message ? err.message : "unknown error");
+    } finally {
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      if (actx) actx.close();
+      URL.revokeObjectURL(url);
+      v.removeAttribute("src");
+      exporting = false;
+      exportBtn.textContent = "⬇ Download video with captions";
+      setTimeout(() => {
+        if (!exporting && exportStatus.textContent.startsWith("Done")) {
+          exportStatus.textContent = EXPORT_HINT;
+        }
+      }, 8000);
+    }
+  }
+
+  exportBtn.addEventListener("click", () => {
+    if (exporting) {
+      cancelExport = true;
+      return;
+    }
+    exportVideo();
+  });
 
   /* ---------- Hooks from script.js ---------- */
   window.onCaptionsReady = (chunks) => {
