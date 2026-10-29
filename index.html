@@ -133,6 +133,27 @@
 </div>
 
         </video>
+        
+<div class="caption-controls" style="margin-top:16px;">
+  <label for="captionLanguage">Spoken language</label>
+  <select id="captionLanguage">
+    <option value="en">English</option>
+    <option value="ne">Nepali</option>
+    <option value="hi">Hindi</option>
+  </select>
+
+  <button type="button" class="btn primary"
+          id="autoCaptionBtn"
+          style="width:100%;margin-top:12px;">
+    ✨ Generate Auto Captions
+  </button>
+
+  <p id="captionStatus" class="muted" aria-live="polite">
+    Upload a video to get started.
+  </p>
+  <div id="captionOutput"></div>
+</div>
+
       </section>
 
       <!-- Generator -->
