@@ -1,0 +1,554 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0b0a12">
+<title>CaptionFlow — Create Better Captions</title>
+<meta name="description" content="Create catchy social media captions, hooks and hashtags for your videos.">
+<style>
+:root {
+  --bg:#0b0a12; --panel:#11101b; --panel2:#171526;
+  --border:#29253d; --purple:#8052ff; --light:#c3a9ff;
+  --text:#f4f0ff; --muted:#9b96b2; --radius:15px;
+}
+* {box-sizing:border-box}
+body {
+  margin:0; background:var(--bg); color:var(--text);
+  font:14px/1.55 Inter,system-ui,-apple-system,sans-serif;
+}
+button,textarea {font:inherit}
+button {cursor:pointer}
+button:focus-visible,textarea:focus-visible {
+  outline:2px solid var(--light); outline-offset:3px;
+}
+.app {min-height:100vh;display:flex}
+.sidebar {
+  width:225px; flex-shrink:0; padding:25px 16px;
+  border-right:1px solid var(--border);
+  background:#0e0c17;display:flex;flex-direction:column;
+}
+.brand {display:flex;align-items:center;gap:10px;padding:0 5px 34px}
+.logo {
+  width:36px;height:36px;border-radius:12px;
+  display:grid;place-items:center;
+  background:linear-gradient(140deg,#c5a5ff,#743aff);
+  color:white;font-size:23px;font-weight:800;
+}
+.brand-name {font-size:19px;font-weight:750;letter-spacing:-.7px}
+.brand-name span {color:#ad8aff}
+.nav {display:grid;gap:7px}
+.nav button {
+  background:transparent;border:0;color:var(--muted);
+  text-align:left;padding:12px 14px;border-radius:11px;
+  display:flex;gap:12px;align-items:center;
+}
+.nav button.active,.nav button:hover {
+  background:#29204b;color:white;
+}
+.nav-icon {width:19px;text-align:center;font-size:17px}
+.sidebar-bottom {
+  margin-top:auto;padding:17px;border:1px solid var(--border);
+  border-radius:14px;background:linear-gradient(150deg,#17132b,#171024);
+}
+.sidebar-bottom strong {font-size:14px}
+.sidebar-bottom p {font-size:12px;color:var(--muted);margin:7px 0}
+.mini-art {color:#bba0ff;font-size:23px;margin-top:5px}
+.main {min-width:0;flex:1;padding:27px clamp(16px,3vw,42px) 50px}
+.topbar {
+  display:flex;justify-content:space-between;align-items:center;
+  gap:16px;margin-bottom:25px;
+}
+h1 {font-size:clamp(22px,2.3vw,29px);letter-spacing:-1px;margin:0}
+.subtitle {color:var(--muted);margin:5px 0 0}
+.avatar {
+  background:#2b204d;color:#d4c0ff;border:1px solid #473374;
+  width:38px;height:38px;border-radius:50%;display:grid;place-items:center;
+  font-weight:700;
+}
+.user {display:flex;align-items:center;gap:10px}
+.user small {display:block;color:var(--muted)}
+.workspace {
+  display:grid;grid-template-columns:minmax(0,1fr) 235px;
+  gap:20px;align-items:start;
+}
+.panel {
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--radius);padding:18px;
+}
+.generator {border-color:#6140a0;box-shadow:0 0 30px #6b35ff08}
+.tabs {
+  display:flex;gap:7px;flex-wrap:wrap;margin-bottom:17px;
+}
+.tab,.chip,.platform {
+  border:1px solid var(--border);background:#171525;
+  color:#c5bfdc;border-radius:10px;padding:9px 13px;
+}
+.tab.active,.chip.active,.platform.active {
+  background:#36245e;border-color:#976cff;color:white;
+}
+.tab.active {box-shadow:inset 0 0 0 1px #8253ff}
+.field-label {font-weight:650;margin:15px 0 8px;display:block}
+textarea {
+  width:100%;min-height:112px;resize:vertical;
+  background:#0d0c16;color:white;border:1px solid #35304d;
+  border-radius:12px;padding:14px;line-height:1.6;
+}
+textarea::placeholder {color:#77718f}
+.field-meta {display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:5px}
+.option-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.platform {
+  padding:11px 7px;text-align:center;min-width:0;
+}
+.platform .picon {display:block;font-size:18px;margin-bottom:3px}
+.platform small {font-size:11px}
+.chips {display:flex;flex-wrap:wrap;gap:7px}
+.chip {font-size:12px;padding:7px 11px}
+.btn {
+  border:0;border-radius:11px;padding:12px 16px;font-weight:700;
+}
+.primary {
+  background:linear-gradient(105deg,#7041f4,#9858ff);
+  color:white;box-shadow:0 5px 18px #7b44ff20;
+}
+.primary:hover {filter:brightness(1.12)}
+.secondary {background:#211c34;border:1px solid var(--border);color:#e6ddff}
+.generate {width:100%;margin-top:20px;display:flex;justify-content:center;gap:9px}
+.side-stack {display:grid;gap:15px}
+.side-title {font-weight:700;margin-bottom:8px}
+.muted {color:var(--muted)}
+.tip {display:flex;gap:9px;margin-top:12px;color:#d3cde4;font-size:12px}
+.tip span {color:#b89aff}
+.results-heading {
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;margin:27px 0 12px;
+}
+.results-heading h2 {font-size:17px;margin:0}
+.results-grid {display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.result-card {min-width:0}
+.result-top {display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:13px}
+.result-top h3 {margin:0;font-size:14px}
+.text-result {
+  background:#0c0b15;border:1px solid #29243d;border-radius:10px;
+  padding:12px;margin-top:9px;display:flex;gap:10px;
+  align-items:flex-start;justify-content:space-between;
+}
+.result-text {white-space:pre-wrap;overflow-wrap:anywhere;color:#ddd6f0;font-size:12px;flex:1}
+.copy {
+  border:1px solid #35304b;border-radius:8px;background:#191629;
+  color:#c9b7ff;padding:6px 8px;font-size:11px;flex-shrink:0;
+}
+.copy:hover {background:#322350}
+.tag-list {display:flex;flex-wrap:wrap;gap:7px}
+.tag {
+  background:#292047;border-radius:20px;padding:5px 9px;
+  font-size:11px;color:#d0baff;overflow-wrap:anywhere;
+}
+.mobile-brand,.mobile-nav,.menu-btn {display:none}
+.empty {color:var(--muted);font-size:12px}
+.toast {
+  position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  background:#292044;border:1px solid #7253b5;color:white;
+  padding:11px 18px;border-radius:10px;z-index:10;
+}
+.hidden {display:none!important}
+@media(max-width:1050px) {
+  .workspace {grid-template-columns:1fr}
+  .side-stack {grid-template-columns:1fr 1fr}
+}
+@media(max-width:700px) {
+  .sidebar {display:none}
+  .main {padding:17px 14px 90px}
+  .topbar {margin-bottom:20px}
+  .topbar h1 {font-size:23px}
+  .user .user-name {display:none}
+  .mobile-brand {display:flex;align-items:center;gap:8px;font-weight:750}
+  .mobile-brand .logo {width:30px;height:30px;font-size:19px}
+  .topbar {flex-wrap:wrap}
+  .mobile-nav {
+    display:flex;position:fixed;bottom:0;left:0;right:0;z-index:5;
+    background:#11101bf5;border-top:1px solid var(--border);
+    justify-content:space-around;padding:9px 4px max(9px,env(safe-area-inset-bottom));
+    backdrop-filter:blur(15px);
+  }
+  .mobile-nav button {
+    border:0;background:transparent;color:var(--muted);
+    font-size:10px;display:grid;gap:3px;justify-items:center;
+  }
+  .mobile-nav button span {font-size:18px}
+  .mobile-nav button.active {color:#bd9dff}
+  .panel {padding:14px}
+  .results-grid,.side-stack {grid-template-columns:1fr}
+  .option-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+  .platform {display:flex;align-items:center;justify-content:center;gap:7px}
+  .platform .picon {margin:0}
+  .platform small {font-size:12px}
+  .generator {padding:13px}
+  .results-heading {margin-top:23px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">C</div>
+      <div class="brand-name">Caption<span>Flow</span></div>
+    </div>
+    <nav class="nav" aria-label="Main navigation">
+      <button class="active" data-page="Home"><span class="nav-icon">⌂</span>Home</button>
+      <button data-page="Generate"><span class="nav-icon">✧</span>Generate</button>
+      <button data-page="History"><span class="nav-icon">◷</span>History</button>
+      <button data-page="Favorites"><span class="nav-icon">♡</span>Favorites</button>
+      <button data-page="Settings"><span class="nav-icon">⚙</span>Settings</button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="mini-art">✦</div>
+      <strong>Create Better Content, Faster</strong>
+      <p>Turn your ideas into captions that get noticed.</p>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <div class="mobile-brand"><div class="logo">C</div>CaptionFlow</div>
+        <h1 id="greeting">Good morning, Creator ✨</h1>
+        <p class="subtitle">Generate catchy captions, hooks and hashtags for your videos.</p>
+      </div>
+      <div class="user">
+        <div class="avatar">C</div>
+        <div class="user-name">Creator<small>Free workspace</small></div>
+      </div>
+    </header>
+
+    <section class="workspace" id="generatorSection">
+      <div>
+        <div class="panel generator">
+          <div class="tabs" role="tablist" aria-label="Generator type">
+            <button class="tab active" data-mode="caption">✧ &nbsp;Caption</button>
+            <button class="tab" data-mode="hook">ϟ &nbsp;Hook</button>
+            <button class="tab" data-mode="hashtags"># &nbsp;Hashtags</button>
+          </div>
+
+          <label class="field-label" for="topic">Describe your video topic</label>
+          <textarea id="topic" maxlength="200" placeholder="e.g. 5 travel tips for Nepal, a funny gaming moment, morning routine..."></textarea>
+          <div class="field-meta"><span>Be specific for better results</span><span id="count">0/200</span></div>
+
+          <label class="field-label">Platform</label>
+          <div class="option-grid" id="platforms">
+            <button class="platform active" data-platform="YouTube"><span class="picon">▶️</span><small>YouTube</small></button>
+            <button class="platform" data-platform="Instagram"><span class="picon">📸</span><small>Instagram</small></button>
+            <button class="platform" data-platform="TikTok"><span class="picon">♪</span><small>TikTok</small></button>
+            <button class="platform" data-platform="X"><span class="picon">𝕏</span><small>X</small></button>
+          </div>
+
+          <label class="field-label">Tone</label>
+          <div class="chips" id="tones">
+            <button class="chip active" data-tone="Professional">Professional</button>
+            <button class="chip" data-tone="Casual">Casual</button>
+            <button class="chip" data-tone="Funny">Funny</button>
+            <button class="chip" data-tone="Inspirational">Inspirational</button>
+          </div>
+
+          <button class="btn primary generate" id="generate">✧ &nbsp; Generate Captions</button>
+          <p class="empty" style="text-align:center;margin:10px 0 0">Free template-based generation · No account needed</p>
+        </div>
+
+        <div class="results-heading">
+          <h2>✧ &nbsp;Generated Results</h2>
+          <button class="copy" id="copyAll">Copy all ↗</button>
+        </div>
+
+        <div class="results-grid">
+          <section class="panel result-card">
+            <div class="result-top"><h3>◉ &nbsp;Captions</h3><span class="muted" style="font-size:11px">3 options</span></div>
+            <div id="captionResults"><p class="empty">Your captions will appear here.</p></div>
+          </section>
+          <section class="panel result-card">
+            <div class="result-top"><h3>ϟ &nbsp;Hooks</h3><span class="muted" style="font-size:11px">3 options</span></div>
+            <div id="hookResults"><p class="empty">Your hooks will appear here.</p></div>
+          </section>
+          <section class="panel result-card">
+            <div class="result-top"><h3># &nbsp;Hashtags</h3><button class="copy" id="copyTags">Copy tags</button></div>
+            <div class="tag-list" id="tagResults"><p class="empty">Your hashtags will appear here.</p></div>
+          </section>
+          <section class="panel result-card">
+            <div class="result-top"><h3>♡ &nbsp;Quick tip</h3></div>
+            <p class="muted" style="font-size:12px;margin:0">Use a clear topic, choose a tone that fits your audience, and make the first line interesting. Try different options to find your voice.</p>
+          </section>
+        </div>
+      </div>
+
+      <aside class="side-stack">
+        <div class="panel">
+          <div class="side-title">♧ &nbsp;Quick Tips</div>
+          <p class="muted" style="font-size:12px;margin:0">Get better results with these tips:</p>
+          <div class="tip"><span>✓</span> Be specific about your topic</div>
+          <div class="tip"><span>✓</span> Mention your target audience</div>
+          <div class="tip"><span>✓</span> Add keywords when relevant</div>
+          <div class="tip"><span>✓</span> Try different tones for variety</div>
+        </div>
+        <div class="panel">
+          <div class="side-title">💡 &nbsp;Creator's Corner</div>
+          <p class="muted" style="font-size:12px;margin-bottom:12px">Good content starts with one clear idea. Keep experimenting until your message feels right.</p>
+          <button class="btn secondary" style="width:100%" id="example">Try an example ↗</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+</div>
+
+<nav class="mobile-nav" aria-label="Mobile navigation">
+  <button class="active" data-page="Home"><span>⌂</span>Home</button>
+  <button data-page="Generate"><span>✧</span>Generate</button>
+  <button data-page="History"><span>◷</span>History</button>
+  <button data-page="Favorites"><span>♡</span>Saved</button>
+</nav>
+
+<div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+let mode = "caption";
+let platform = "YouTube";
+let tone = "Professional";
+let lastResults = {captions:[], hooks:[], tags:[]};
+let history = [];
+let toastTimer;
+
+$("topic").addEventListener("input", () => {
+  $("count").textContent = $("topic").value.length + "/200";
+});
+
+document.querySelectorAll("[data-mode]").forEach(button => {
+  button.addEventListener("click", () => {
+    mode = button.dataset.mode;
+    document.querySelectorAll("[data-mode]").forEach(b => b.classList.toggle("active", b === button));
+    const labels = {
+      caption:"Generate Captions",
+      hook:"Generate Hooks",
+      hashtags:"Generate Hashtags"
+    };
+    $("generate").innerHTML = "✧ &nbsp;" + labels[mode];
+  });
+});
+
+document.querySelectorAll("[data-platform]").forEach(button => {
+  button.addEventListener("click", () => {
+    platform = button.dataset.platform;
+    document.querySelectorAll("[data-platform]").forEach(b => b.classList.toggle("active", b === button));
+  });
+});
+
+document.querySelectorAll("[data-tone]").forEach(button => {
+  button.addEventListener("click", () => {
+    tone = button.dataset.tone;
+    document.querySelectorAll("[data-tone]").forEach(b => b.classList.toggle("active", b === button));
+  });
+});
+
+function notify(message) {
+  $("toast").textContent = message;
+  $("toast").classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $("toast").classList.add("hidden"), 2200);
+}
+
+function cleanTopic(value) {
+  return value.trim().replace(/\s+/g, " ").replace(/[.!?]+$/, "");
+}
+
+function makeResults(topic) {
+  const subject = topic || "your next big idea";
+  const lower = subject.toLowerCase();
+  const hashtagWords = lower.match(/[a-z0-9]+/g) || [];
+  const tags = [...new Set([
+    ...hashtagWords.filter(w => w.length > 2).slice(0,4),
+    "contentcreator", "shorts", "reels", "creatorlife"
+  ])].slice(0,8).map(w => "#" + w.replace(/[^a-z0-9]/g,""));
+
+  let captions;
+  if (tone === "Funny") {
+    captions = [
+      subject + " had no business being this funny 😂 What would you do?",
+      "POV: You thought " + subject + " would be easy. Plot twist 😂",
+      "I can't be the only one thinking about " + subject + " 😭👇"
+    ];
+  } else if (tone === "Casual") {
+    captions = [
+      "Let's talk about " + subject + " 👀 What do you think?",
+      "A little something about " + subject + " ✨ Save this for later!",
+      "Sharing this because " + subject + " deserves more attention 🙌"
+    ];
+  } else if (tone === "Inspirational") {
+    captions = [
+      "Every big journey starts somewhere. Here's a reminder about " + subject + " ✨",
+      "Keep learning, keep growing. Your next step starts with " + subject + " 💜",
+      "Small steps create big change. Let " + subject + " inspire your next move 🚀"
+    ];
+  } else {
+    captions = [
+      "Everything you need to know about " + subject + ". Save this for later.",
+      "A closer look at " + subject + " — here's what matters most.",
+      "Let's break down " + subject + ". Share your thoughts below."
+    ];
+  }
+
+  let hooks;
+  if (tone === "Funny") {
+    hooks = [
+      "Nobody warned me about " + subject + " 😂",
+      "I have questions about " + subject + " 💀",
+      "Tell me this isn't just me and " + subject + " 👀"
+    ];
+  } else if (tone === "Inspirational") {
+    hooks = [
+      "This could change how you approach " + subject + " ✨",
+      "Here's your reminder to keep going with " + subject + " 💜",
+      "One small step toward understanding " + subject + " 🚀"
+    ];
+  } else if (tone === "Casual") {
+    hooks = [
+      "Wait, have you tried this with " + subject + "? 👀",
+      "Let's make " + subject + " easier.",
+      "Here's something about " + subject + " you might like."
+    ];
+  } else {
+    hooks = [
+      "3 things to know about " + subject + ".",
+      "Before you try " + subject + ", watch this.",
+      "Here's what people often miss about " + subject + "."
+    ];
+  }
+
+  if (platform === "TikTok") {
+    hooks[0] = "Stop scrolling if you're interested in " + subject + " 👀";
+  } else if (platform === "Instagram") {
+    captions[0] += "\nDouble-tap if you agree 💜";
+  } else if (platform === "X") {
+    captions[0] = subject + ": here's the part worth talking about.";
+  }
+
+  return {captions, hooks, tags};
+}
+
+function renderTextResults(container, items, prefix) {
+  container.replaceChildren();
+  items.forEach((text, index) => {
+    const card = document.createElement("div");
+    card.className = "text-result";
+    const content = document.createElement("div");
+    content.className = "result-text";
+    content.textContent = text;
+    const button = document.createElement("button");
+    button.className = "copy";
+    button.textContent = "Copy";
+    button.setAttribute("aria-label", "Copy " + prefix + " " + (index + 1));
+    button.addEventListener("click", () => copyText(text));
+    card.append(content, button);
+    container.append(card);
+  });
+}
+
+function renderTags(tags) {
+  $("tagResults").replaceChildren();
+  tags.forEach(tag => {
+    const span = document.createElement("span");
+    span.className = "tag";
+    span.textContent = tag;
+    $("tagResults").append(span);
+  });
+}
+
+function generate() {
+  const topic = cleanTopic($("topic").value);
+  if (!topic) {
+    $("topic").focus();
+    notify("Enter your video topic first.");
+    return;
+  }
+  lastResults = makeResults(topic);
+  renderTextResults($("captionResults"), lastResults.captions, "caption");
+  renderTextResults($("hookResults"), lastResults.hooks, "hook");
+  renderTags(lastResults.tags);
+  history.unshift({topic, ...lastResults});
+  history = history.slice(0,20);
+  notify("Your content ideas are ready!");
+  if (mode === "hook") $("hookResults").scrollIntoView({behavior:"smooth",block:"center"});
+  else if (mode === "hashtags") $("tagResults").scrollIntoView({behavior:"smooth",block:"center"});
+  else $("captionResults").scrollIntoView({behavior:"smooth",block:"center"});
+}
+
+$("generate").addEventListener("click", generate);
+
+async function copyText(text) {
+  if (!text) {
+    notify("Generate some content first.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    notify("Copied to clipboard!");
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    const ok = document.execCommand("copy");
+    input.remove();
+    notify(ok ? "Copied to clipboard!" : "Copy failed. Please select the text.");
+  }
+}
+
+$("copyTags").addEventListener("click", () => copyText(lastResults.tags.join(" ")));
+$("copyAll").addEventListener("click", () => {
+  const all = [
+    "CAPTIONS", ...lastResults.captions, "",
+    "HOOKS", ...lastResults.hooks, "",
+    "HASHTAGS", lastResults.tags.join(" ")
+  ].join("\n");
+  copyText(lastResults.captions.length ? all : "");
+});
+
+$("example").addEventListener("click", () => {
+  $("topic").value = "5 useful video editing tips for beginners";
+  $("count").textContent = $("topic").value.length + "/200";
+  generate();
+});
+
+function setPage(page) {
+  document.querySelectorAll("[data-page]").forEach(b => {
+    b.classList.toggle("active", b.dataset.page === page);
+  });
+  if (page === "Generate") {
+    $("topic").focus({preventScroll:true});
+    $("generatorSection").scrollIntoView({behavior:"smooth"});
+  } else if (page === "History") {
+    if (history.length) {
+      const item = history[0];
+      $("topic").value = item.topic;
+      $("count").textContent = item.topic.length + "/200";
+      lastResults = {captions:item.captions, hooks:item.hooks, tags:item.tags};
+      renderTextResults($("captionResults"), item.captions, "caption");
+      renderTextResults($("hookResults"), item.hooks, "hook");
+      renderTags(item.tags);
+      notify("Showing your latest result.");
+    } else notify("Your history will appear after your first generation.");
+  } else if (page === "Favorites") {
+    notify("Favorites will be available in a future version.");
+  } else if (page === "Settings") {
+    notify("Settings will be available in a future version.");
+  } else {
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+}
+document.querySelectorAll("[data-page]").forEach(button => {
+  button.addEventListener("click", () => setPage(button.dataset.page));
+});
+</script>
+</body>
+</html>
