@@ -1,60 +1,14 @@
-
 const $ = (id) => document.getElementById(id);
-console.log("CaptionFlow JavaScript is running!");
 
-const autoCaptionBtn = $("autoCaptionBtn");
-const captionStatus = $("captionStatus");
-const captionOutput = $("captionOutput");
-
-if (autoCaptionBtn) {
-  autoCaptionBtn.addEventListener("click", () => {
-    const videoInput = $("videoFile");
-
-    if (!videoInput || !videoInput.files.length) {
-      captionStatus.textContent = "Please upload a video first.";
-      return;
-    }
-
-    captionStatus.textContent =
-      "Auto-captioning is not connected yet. The speech transcription engine still needs to be added.";
-
-    captionOutput.textContent = "";
-  });
-}
-
-
-const autoCaptionBtn = $("autoCaptionBtn");
-const captionLanguage = $("captionLanguage");
-const captionStatus = $("captionStatus");
-const captionOutput = $("captionOutput");
-
-if (autoCaptionBtn) {
-  autoCaptionBtn.addEventListener("click", () => {
-    const video = $("videoFile");
-
-    if (!video || !video.files || !video.files.length) {
-      captionStatus.textContent = "Please upload a video first.";
-      return;
-    }
-
-    captionStatus.textContent =
-      "Automatic transcription needs an audio transcription engine. This button is ready for the next integration step.";
-
-    captionOutput.textContent = "";
-  });
-}
-
-
+/* ---------- Video upload + preview ---------- */
 const videoFileInput = $("videoFile");
 const videoPreview = $("videoPreview");
 const videoFileName = $("videoFileName");
-
 let currentVideoUrl = null;
 
-if (videoFileInput && videoPreview && videoFileName) {
+if (videoFileInput) {
   videoFileInput.addEventListener("change", () => {
     const file = videoFileInput.files[0];
-
     if (!file) return;
 
     if (!file.type.startsWith("video/")) {
@@ -63,17 +17,190 @@ if (videoFileInput && videoPreview && videoFileName) {
       return;
     }
 
-    if (currentVideoUrl) {
-      URL.revokeObjectURL(currentVideoUrl);
-    }
-
+    if (currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
     currentVideoUrl = URL.createObjectURL(file);
 
     videoPreview.src = currentVideoUrl;
     videoPreview.hidden = false;
     videoFileName.textContent = file.name;
-
+    $("captionOutput").replaceChildren();
+    $("captionStatus").textContent = "Ready. Click Generate Auto Captions.";
     notify("Video loaded! You can preview it now.");
+  });
+}
+
+/* ---------- Auto captions (Whisper running in the browser) ---------- */
+const autoCaptionBtn = $("autoCaptionBtn");
+const captionLanguage = $("captionLanguage");
+const captionStatus = $("captionStatus");
+const captionOutput = $("captionOutput");
+
+let transcriberPromise = null;
+let loadedModel = null;
+
+function getTranscriber(model) {
+  if (loadedModel !== model) {
+    loadedModel = model;
+    transcriberPromise = import(
+      "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2"
+    ).then(({ pipeline }) =>
+      pipeline("automatic-speech-recognition", model, {
+        progress_callback: (p) => {
+          if (p.status === "progress") {
+            captionStatus.textContent =
+              `Downloading speech model… ${Math.round(p.progress)}% (first time only)`;
+          }
+        }
+      })
+    );
+  }
+  return transcriberPromise;
+}
+
+async function extractAudio(file) {
+  const buffer = await file.arrayBuffer();
+  const ctx = new AudioContext({ sampleRate: 16000 });
+  const decoded = await ctx.decodeAudioData(buffer);
+  await ctx.close();
+
+  if (decoded.numberOfChannels < 2) return decoded.getChannelData(0);
+
+  const left = decoded.getChannelData(0);
+  const right = decoded.getChannelData(1);
+  const mono = new Float32Array(left.length);
+  for (let i = 0; i < left.length; i++) mono[i] = (left[i] + right[i]) / 2;
+  return mono;
+}
+
+function formatTime(sec, sep) {
+  const ms = Math.round((sec % 1) * 1000);
+  const s = Math.floor(sec) % 60;
+  const m = Math.floor(sec / 60) % 60;
+  const h = Math.floor(sec / 3600);
+  const p = (n, l = 2) => String(n).padStart(l, "0");
+  return `${p(h)}:${p(m)}:${p(s)}${sep}${p(ms, 3)}`;
+}
+
+function buildSubtitles(chunks, type) {
+  const sep = type === "vtt" ? "." : ",";
+  const body = chunks
+    .map((c, i) => {
+      const start = c.timestamp[0] ?? 0;
+      const end = c.timestamp[1] ?? start + 3;
+      return `${i + 1}\n${formatTime(start, sep)} --> ${formatTime(end, sep)}\n${c.text.trim()}\n`;
+    })
+    .join("\n");
+  return type === "vtt" ? "WEBVTT\n\n" + body : body;
+}
+
+function downloadFile(name, content, mime) {
+  const url = URL.createObjectURL(new Blob([content], { type: mime }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function attachTrack(vtt, lang) {
+  videoPreview.querySelectorAll("track").forEach((t) => t.remove());
+  const track = document.createElement("track");
+  track.kind = "captions";
+  track.label = "Auto captions";
+  track.srclang = lang;
+  track.default = true;
+  track.src = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+  videoPreview.append(track);
+}
+
+function renderCaptions(chunks, lang) {
+  captionOutput.replaceChildren();
+
+  chunks.forEach((c) => {
+    const line = document.createElement("div");
+    line.className = "caption-line";
+
+    const time = document.createElement("time");
+    time.textContent = formatTime(c.timestamp[0] ?? 0, ".").slice(3, 8);
+
+    const text = document.createElement("span");
+    text.textContent = c.text.trim();
+
+    line.append(time, text);
+    captionOutput.append(line);
+  });
+
+  const actions = document.createElement("div");
+  actions.className = "caption-actions";
+
+  const makeBtn = (label, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "copy";
+    b.textContent = label;
+    b.addEventListener("click", fn);
+    actions.append(b);
+  };
+
+  makeBtn("Download .srt", () =>
+    downloadFile("captions.srt", buildSubtitles(chunks, "srt"), "text/plain"));
+  makeBtn("Download .vtt", () =>
+    downloadFile("captions.vtt", buildSubtitles(chunks, "vtt"), "text/vtt"));
+  makeBtn("Copy text", () =>
+    copyText(chunks.map((c) => c.text.trim()).join(" ")));
+
+  captionOutput.append(actions);
+  attachTrack(buildSubtitles(chunks, "vtt"), lang);
+}
+
+if (autoCaptionBtn) {
+  autoCaptionBtn.addEventListener("click", async () => {
+    const file = videoFileInput && videoFileInput.files[0];
+    if (!file) {
+      captionStatus.textContent = "Please upload a video first.";
+      return;
+    }
+
+    const language = captionLanguage.value; // english | nepali | hindi
+    const model = language === "english"
+      ? "Xenova/whisper-base"
+      : "Xenova/whisper-small"; // better for Nepali/Hindi, larger download
+
+    autoCaptionBtn.disabled = true;
+    captionOutput.replaceChildren();
+
+    try {
+      captionStatus.textContent = "Reading audio from video…";
+      const audio = await extractAudio(file);
+
+      captionStatus.textContent = "Loading speech model…";
+      const transcriber = await getTranscriber(model);
+
+      captionStatus.textContent = "Transcribing… this can take a few minutes.";
+      const result = await transcriber(audio, {
+        language,
+        task: "transcribe",
+        return_timestamps: true,
+        chunk_length_s: 30,
+        stride_length_s: 5
+      });
+
+      const chunks = (result.chunks || []).filter((c) => c.text.trim());
+      if (!chunks.length) {
+        captionStatus.textContent = "No speech was detected in this video.";
+        return;
+      }
+
+      renderCaptions(chunks, language.slice(0, 2));
+      captionStatus.textContent = "Done! Captions are also showing on your video.";
+      notify("Captions ready!");
+    } catch (err) {
+      console.error(err);
+      captionStatus.textContent =
+        "Something went wrong. Try a shorter video, or check your internet connection.";
+    } finally {
+      autoCaptionBtn.disabled = false;
+    }
   });
 }
 
