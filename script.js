@@ -1,6 +1,28 @@
 
 const $ = (id) => document.getElementById(id);
 
+const autoCaptionBtn = $("autoCaptionBtn");
+const captionLanguage = $("captionLanguage");
+const captionStatus = $("captionStatus");
+const captionOutput = $("captionOutput");
+
+if (autoCaptionBtn) {
+  autoCaptionBtn.addEventListener("click", () => {
+    const video = $("videoFile");
+
+    if (!video || !video.files || !video.files.length) {
+      captionStatus.textContent = "Please upload a video first.";
+      return;
+    }
+
+    captionStatus.textContent =
+      "Automatic transcription needs an audio transcription engine. This button is ready for the next integration step.";
+
+    captionOutput.textContent = "";
+  });
+}
+
+
 const videoFileInput = $("videoFile");
 const videoPreview = $("videoPreview");
 const videoFileName = $("videoFileName");
