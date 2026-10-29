@@ -1,5 +1,6 @@
 
 const $ = (id) => document.getElementById(id);
+console.log("CaptionFlow JavaScript is running!");
 
 const autoCaptionBtn = $("autoCaptionBtn");
 const captionStatus = $("captionStatus");
