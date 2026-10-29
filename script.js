@@ -635,6 +635,9 @@ $("greeting").textContent =
 /* CaptionFlow – styled captions: 10 templates, live overlay, auto adjust, editing.
    Load AFTER script.js:  <script src="captionstyles.js" defer></script> */
 (() => {
+  // Safety: if this file is loaded twice, do nothing the second time
+  if (window.__captionStylesLoaded) return;
+  window.__captionStylesLoaded = true;
   console.log("CaptionFlow caption styles loaded");
   const video = document.getElementById("videoPreview");
   const output = document.getElementById("captionOutput");
@@ -812,9 +815,9 @@ $("greeting").textContent =
       .sort((a, b) => a - b);
     const typical = lengths[Math.floor(lengths.length * 0.8)] || 30;
 
-    // ~0.55em average glyph width, 88% usable width, aiming for 2 lines
-    const size = (88 * 2) / (0.55 * typical);
-    state.size = Math.round(Math.min(7, Math.max(3, size)) * 10) / 10;
+    // ~0.68em average glyph width (bold text), 88% usable width, aiming for 2 lines
+    const size = (88 * 2) / (0.68 * typical);
+    state.size = Math.round(Math.min(6.5, Math.max(3, size)) * 10) / 10;
 
     const portrait = video.videoHeight > video.videoWidth;
     state.pos = portrait ? 22 : 14;
