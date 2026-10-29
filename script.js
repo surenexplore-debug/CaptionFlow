@@ -2,6 +2,27 @@
 const $ = (id) => document.getElementById(id);
 
 const autoCaptionBtn = $("autoCaptionBtn");
+const captionStatus = $("captionStatus");
+const captionOutput = $("captionOutput");
+
+if (autoCaptionBtn) {
+  autoCaptionBtn.addEventListener("click", () => {
+    const videoInput = $("videoFile");
+
+    if (!videoInput || !videoInput.files.length) {
+      captionStatus.textContent = "Please upload a video first.";
+      return;
+    }
+
+    captionStatus.textContent =
+      "Auto-captioning is not connected yet. The speech transcription engine still needs to be added.";
+
+    captionOutput.textContent = "";
+  });
+}
+
+
+const autoCaptionBtn = $("autoCaptionBtn");
 const captionLanguage = $("captionLanguage");
 const captionStatus = $("captionStatus");
 const captionOutput = $("captionOutput");
