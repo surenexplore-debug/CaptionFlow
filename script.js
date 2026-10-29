@@ -1,12 +1,65 @@
 const $ = (id) => document.getElementById(id);
 
+/* ---------- Shared state (declared first so nothing hits a late declaration) ---------- */
+let mode = "caption";
+let platform = "YouTube";
+let tone = "Professional";
+
+let lastResults = { captions: [], hooks: [], tags: [] };
+let generationHistory = []; // renamed from `history` so it never clashes with window.history
+let toastTimer;
+
+/* ---------- Notifications ---------- */
+function notify(message) {
+  const toast = $("toast");
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove("hidden");
+
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.add("hidden"), 2200);
+}
+
+/* ---------- Copy helper ---------- */
+async function copyText(text) {
+  if (!text) {
+    notify("Generate some content first.");
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    notify("Copied to clipboard!");
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = text;
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.append(input);
+    input.select();
+    const success = document.execCommand("copy");
+    input.remove();
+    notify(success ? "Copied to clipboard!" : "Copy failed. Please select the text.");
+  }
+}
+
 /* ---------- Video upload + preview ---------- */
 const videoFileInput = $("videoFile");
 const videoPreview = $("videoPreview");
 const videoFileName = $("videoFileName");
 let currentVideoUrl = null;
+let currentTrackUrl = null;
 
-if (videoFileInput) {
+function clearTracks() {
+  if (!videoPreview) return;
+  videoPreview.querySelectorAll("track").forEach((t) => t.remove());
+  if (currentTrackUrl) {
+    URL.revokeObjectURL(currentTrackUrl);
+    currentTrackUrl = null;
+  }
+}
+
+if (videoFileInput && videoPreview && videoFileName) {
   videoFileInput.addEventListener("change", () => {
     const file = videoFileInput.files[0];
     if (!file) return;
@@ -18,6 +71,7 @@ if (videoFileInput) {
     }
 
     if (currentVideoUrl) URL.revokeObjectURL(currentVideoUrl);
+    clearTracks(); // remove captions that belonged to the previous video
     currentVideoUrl = URL.createObjectURL(file);
 
     videoPreview.src = currentVideoUrl;
@@ -35,33 +89,52 @@ const captionLanguage = $("captionLanguage");
 const captionStatus = $("captionStatus");
 const captionOutput = $("captionOutput");
 
+const MAX_VIDEO_MB = 300;
+
 let transcriberPromise = null;
 let loadedModel = null;
 
 function getTranscriber(model) {
-  if (loadedModel !== model) {
+  if (loadedModel !== model || !transcriberPromise) {
     loadedModel = model;
     transcriberPromise = import(
       "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.2"
-    ).then(({ pipeline }) =>
-      pipeline("automatic-speech-recognition", model, {
-        progress_callback: (p) => {
-          if (p.status === "progress") {
-            captionStatus.textContent =
-              `Downloading speech model… ${Math.round(p.progress)}% (first time only)`;
+    )
+      .then(({ pipeline }) =>
+        pipeline("automatic-speech-recognition", model, {
+          progress_callback: (p) => {
+            if (p.status === "progress" && typeof p.progress === "number") {
+              captionStatus.textContent =
+                `Downloading speech model… ${Math.round(p.progress)}% (first time only)`;
+            }
           }
-        }
-      })
-    );
+        })
+      )
+      .catch((err) => {
+        // Reset so the next click can retry instead of reusing a failed promise
+        transcriberPromise = null;
+        loadedModel = null;
+        throw err;
+      });
   }
   return transcriberPromise;
 }
 
 async function extractAudio(file) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error("AUDIO_UNSUPPORTED");
+
   const buffer = await file.arrayBuffer();
-  const ctx = new AudioContext({ sampleRate: 16000 });
-  const decoded = await ctx.decodeAudioData(buffer);
-  await ctx.close();
+  const ctx = new AudioCtx({ sampleRate: 16000 });
+
+  let decoded;
+  try {
+    decoded = await ctx.decodeAudioData(buffer);
+  } catch (e) {
+    throw new Error("DECODE_FAILED");
+  } finally {
+    ctx.close();
+  }
 
   if (decoded.numberOfChannels < 2) return decoded.getChannelData(0);
 
@@ -72,11 +145,13 @@ async function extractAudio(file) {
   return mono;
 }
 
+// Fixed: rounding the total milliseconds avoids ".1000" glitches
 function formatTime(sec, sep) {
-  const ms = Math.round((sec % 1) * 1000);
-  const s = Math.floor(sec) % 60;
-  const m = Math.floor(sec / 60) % 60;
-  const h = Math.floor(sec / 3600);
+  const total = Math.max(0, Math.round(sec * 1000));
+  const ms = total % 1000;
+  const s = Math.floor(total / 1000) % 60;
+  const m = Math.floor(total / 60000) % 60;
+  const h = Math.floor(total / 3600000);
   const p = (n, l = 2) => String(n).padStart(l, "0");
   return `${p(h)}:${p(m)}:${p(s)}${sep}${p(ms, 3)}`;
 }
@@ -85,8 +160,8 @@ function buildSubtitles(chunks, type) {
   const sep = type === "vtt" ? "." : ",";
   const body = chunks
     .map((c, i) => {
-      const start = c.timestamp[0] ?? 0;
-      const end = c.timestamp[1] ?? start + 3;
+      const start = c.timestamp?.[0] ?? 0;
+      const end = c.timestamp?.[1] ?? start + 3;
       return `${i + 1}\n${formatTime(start, sep)} --> ${formatTime(end, sep)}\n${c.text.trim()}\n`;
     })
     .join("\n");
@@ -98,19 +173,31 @@ function downloadFile(name, content, mime) {
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Delay revoke so the browser can start the download first
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function attachTrack(vtt, lang) {
-  videoPreview.querySelectorAll("track").forEach((t) => t.remove());
+  clearTracks();
+
+  currentTrackUrl = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+
   const track = document.createElement("track");
   track.kind = "captions";
   track.label = "Auto captions";
   track.srclang = lang;
   track.default = true;
-  track.src = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+  track.src = currentTrackUrl;
   videoPreview.append(track);
+
+  // Force the captions to show (default alone isn't reliable in every browser)
+  track.addEventListener("load", () => {
+    track.track.mode = "showing";
+  });
+  track.track.mode = "showing";
 }
 
 function renderCaptions(chunks, lang) {
@@ -121,7 +208,7 @@ function renderCaptions(chunks, lang) {
     line.className = "caption-line";
 
     const time = document.createElement("time");
-    time.textContent = formatTime(c.timestamp[0] ?? 0, ".").slice(3, 8);
+    time.textContent = formatTime(c.timestamp?.[0] ?? 0, ".").slice(3, 8);
 
     const text = document.createElement("span");
     text.textContent = c.text.trim();
@@ -161,6 +248,12 @@ if (autoCaptionBtn) {
       return;
     }
 
+    if (file.size > MAX_VIDEO_MB * 1024 * 1024) {
+      captionStatus.textContent =
+        `This video is larger than ${MAX_VIDEO_MB} MB. Please use a shorter or smaller video.`;
+      return;
+    }
+
     const language = captionLanguage.value; // english | nepali | hindi
     const model = language === "english"
       ? "Xenova/whisper-base"
@@ -176,7 +269,10 @@ if (autoCaptionBtn) {
       captionStatus.textContent = "Loading speech model…";
       const transcriber = await getTranscriber(model);
 
-      captionStatus.textContent = "Transcribing… this can take a few minutes.";
+      captionStatus.textContent = "Transcribing… this can take a few minutes. The page may feel slow meanwhile.";
+      // Let the browser paint the message before the heavy work starts
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       const result = await transcriber(audio, {
         language,
         task: "transcribe",
@@ -196,27 +292,22 @@ if (autoCaptionBtn) {
       notify("Captions ready!");
     } catch (err) {
       console.error(err);
-      captionStatus.textContent =
-        "Something went wrong. Try a shorter video, or check your internet connection.";
+      if (err.message === "DECODE_FAILED") {
+        captionStatus.textContent =
+          "Your browser couldn't read the audio in this file. Try an MP4 (H.264/AAC) video.";
+      } else if (err.message === "AUDIO_UNSUPPORTED") {
+        captionStatus.textContent = "This browser doesn't support audio processing. Try Chrome or Edge.";
+      } else {
+        captionStatus.textContent =
+          "Something went wrong. Check your internet connection (needed to download the model once) or try a shorter video.";
+      }
     } finally {
       autoCaptionBtn.disabled = false;
     }
   });
 }
 
-
-let mode = "caption";
-let platform = "YouTube";
-let tone = "Professional";
-
-let lastResults = {
-  captions: [],
-  hooks: [],
-  tags: []
-};
-
-let history = [];
-let toastTimer;
+/* ---------- Generator controls ---------- */
 
 // Character counter
 $("topic").addEventListener("input", () => {
@@ -270,18 +361,6 @@ document.querySelectorAll("[data-tone]").forEach((button) => {
   });
 });
 
-// Notifications
-function notify(message) {
-  $("toast").textContent = message;
-  $("toast").classList.remove("hidden");
-
-  clearTimeout(toastTimer);
-
-  toastTimer = setTimeout(() => {
-    $("toast").classList.add("hidden");
-  }, 2200);
-}
-
 // Clean up the user's topic
 function cleanTopic(value) {
   return value.trim().replace(/\s+/g, " ").replace(/[.!?]+$/, "");
@@ -291,7 +370,6 @@ function cleanTopic(value) {
 function makeResults(topic) {
   const subject = topic;
   const lower = subject.toLowerCase();
-
   const words = lower.match(/[a-z0-9]+/g) || [];
 
   const tags = [
@@ -315,7 +393,6 @@ function makeResults(topic) {
       `POV: You thought ${subject} would be easy. Plot twist 😂`,
       `I can't be the only one thinking about ${subject} 😭👇`
     ];
-
     hooks = [
       `Nobody warned me about ${subject} 😂`,
       `I have questions about ${subject} 💀`,
@@ -327,7 +404,6 @@ function makeResults(topic) {
       `A little something about ${subject} ✨ Save this for later!`,
       `Sharing this because ${subject} deserves more attention 🙌`
     ];
-
     hooks = [
       `Wait, have you tried this with ${subject}? 👀`,
       `Let's make ${subject} easier.`,
@@ -339,7 +415,6 @@ function makeResults(topic) {
       `Keep learning, keep growing. Your next step starts with ${subject} 💜`,
       `Small steps create big change. Let ${subject} inspire your next move 🚀`
     ];
-
     hooks = [
       `This could change how you approach ${subject} ✨`,
       `Here's your reminder to keep going with ${subject} 💜`,
@@ -351,7 +426,6 @@ function makeResults(topic) {
       `A closer look at ${subject} — here's what matters most.`,
       `Let's break down ${subject}. Share your thoughts below.`
     ];
-
     hooks = [
       `3 things to know about ${subject}.`,
       `Before you try ${subject}, watch this.`,
@@ -363,11 +437,9 @@ function makeResults(topic) {
   if (platform === "TikTok") {
     hooks[0] = `Stop scrolling if you're interested in ${subject} 👀`;
   }
-
   if (platform === "Instagram") {
     captions[0] += "\nDouble-tap if you agree 💜";
   }
-
   if (platform === "X") {
     captions[0] = `${subject}: here's the part worth talking about.`;
   }
@@ -390,11 +462,7 @@ function renderTextResults(container, items, prefix) {
     const button = document.createElement("button");
     button.className = "copy";
     button.textContent = "Copy";
-    button.setAttribute(
-      "aria-label",
-      `Copy ${prefix} ${index + 1}`
-    );
-
+    button.setAttribute("aria-label", `Copy ${prefix} ${index + 1}`);
     button.addEventListener("click", () => copyText(text));
 
     card.append(content, button);
@@ -410,7 +478,6 @@ function renderTags(tags) {
     const span = document.createElement("span");
     span.className = "tag";
     span.textContent = tag;
-
     $("tagResults").append(span);
   });
 }
@@ -427,28 +494,17 @@ function generate() {
 
   lastResults = makeResults(topic);
 
-  renderTextResults(
-    $("captionResults"),
-    lastResults.captions,
-    "caption"
-  );
-
-  renderTextResults(
-    $("hookResults"),
-    lastResults.hooks,
-    "hook"
-  );
-
+  renderTextResults($("captionResults"), lastResults.captions, "caption");
+  renderTextResults($("hookResults"), lastResults.hooks, "hook");
   renderTags(lastResults.tags);
 
-  history.unshift({
+  generationHistory.unshift({
     topic,
     captions: [...lastResults.captions],
     hooks: [...lastResults.hooks],
     tags: [...lastResults.tags]
   });
-
-  history = history.slice(0, 20);
+  generationHistory = generationHistory.slice(0, 20);
 
   notify("Your content ideas are ready!");
 
@@ -460,45 +516,11 @@ function generate() {
         : $("captionResults");
 
   if (window.matchMedia("(max-width: 700px)").matches) {
-    target.scrollIntoView({
-      behavior: "smooth",
-      block: "center"
-    });
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 }
 
 $("generate").addEventListener("click", generate);
-
-// Copy text to clipboard
-async function copyText(text) {
-  if (!text) {
-    notify("Generate some content first.");
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    notify("Copied to clipboard!");
-  } catch {
-    const input = document.createElement("textarea");
-
-    input.value = text;
-    input.style.position = "fixed";
-    input.style.opacity = "0";
-
-    document.body.append(input);
-    input.select();
-
-    const success = document.execCommand("copy");
-    input.remove();
-
-    notify(
-      success
-        ? "Copied to clipboard!"
-        : "Copy failed. Please select the text."
-    );
-  }
-}
 
 // Copy hashtags
 $("copyTags").addEventListener("click", () => {
@@ -529,14 +551,11 @@ $("copyAll").addEventListener("click", () => {
 // Fill and generate a sample topic
 $("example").addEventListener("click", () => {
   $("topic").value = "5 useful video editing tips for beginners";
-
-  $("count").textContent =
-    $("topic").value.length + "/200";
-
+  $("count").textContent = $("topic").value.length + "/200";
   generate();
 });
 
-// Navigation
+/* ---------- Navigation ---------- */
 function setPage(page) {
   document.querySelectorAll("[data-page]").forEach((button) => {
     button.classList.toggle("active", button.dataset.page === page);
@@ -549,12 +568,12 @@ function setPage(page) {
   }
 
   if (page === "History") {
-    if (!history.length) {
+    if (!generationHistory.length) {
       notify("Your history will appear after your first generation.");
       return;
     }
 
-    const item = history[0];
+    const item = generationHistory[0];
 
     $("topic").value = item.topic;
     $("count").textContent = item.topic.length + "/200";
@@ -565,18 +584,8 @@ function setPage(page) {
       tags: [...item.tags]
     };
 
-    renderTextResults(
-      $("captionResults"),
-      item.captions,
-      "caption"
-    );
-
-    renderTextResults(
-      $("hookResults"),
-      item.hooks,
-      "hook"
-    );
-
+    renderTextResults($("captionResults"), item.captions, "caption");
+    renderTextResults($("hookResults"), item.hooks, "hook");
     renderTags(item.tags);
 
     notify("Showing your latest result.");
@@ -597,17 +606,12 @@ function setPage(page) {
 }
 
 document.querySelectorAll("[data-page]").forEach((button) => {
-  button.addEventListener("click", () => {
-    setPage(button.dataset.page);
-  });
+  button.addEventListener("click", () => setPage(button.dataset.page));
 });
 
-// Time-based greeting
+/* ---------- Time-based greeting ---------- */
 const hour = new Date().getHours();
 
 $("greeting").textContent =
-  (hour < 12
-    ? "Good morning"
-    : hour < 18
-      ? "Good afternoon"
-      : "Good evening") + ", Creator ✨";
+  (hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening") +
+  ", Creator ✨";
