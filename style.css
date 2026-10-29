@@ -578,3 +578,14 @@ textarea::placeholder {
     margin-top: 23px;
   }
 }
+.video-upload-panel { grid-column: 1 / -1; }
+
+.caption-line {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.caption-line time { color: var(--light); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.caption-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
