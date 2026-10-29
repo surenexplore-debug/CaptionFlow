@@ -194,10 +194,12 @@ function attachTrack(vtt, lang) {
   videoPreview.append(track);
 
   // Force the captions to show (default alone isn't reliable in every browser)
+  // Captions are drawn by our own styled overlay (captionstyles.js),
+  // so the browser's built-in caption display stays hidden.
   track.addEventListener("load", () => {
-    track.track.mode = "showing";
+    track.track.mode = "hidden";
   });
-  track.track.mode = "showing";
+  track.track.mode = "hidden";
 }
 
 function renderCaptions(chunks, lang) {
@@ -238,6 +240,9 @@ function renderCaptions(chunks, lang) {
 
   captionOutput.append(actions);
   attachTrack(buildSubtitles(chunks, "vtt"), lang);
+
+  // Tell the caption-style module that new captions are ready
+  if (window.onCaptionsReady) window.onCaptionsReady(chunks);
 }
 
 if (autoCaptionBtn) {
